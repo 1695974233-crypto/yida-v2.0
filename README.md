@@ -1,6 +1,17 @@
-# 易搭 · AI 穿搭助手
+# 易搭 v2.0 · AI 穿搭助手
 
 易搭是一款面向手机 H5 的个人 AI 衣柜与穿搭助手。用户可以从照片中识别单品、生成白底商品图、维护个人衣柜，并获得穿搭推荐和试穿效果图。
+
+## 在线体验
+
+- 线上网站：[立即试用易搭](https://sidcq5h51g43rsuddsnda.apigateway-cn-beijing.volceapi.com/)
+- 当前采用邀请码登录。如需试用，请添加微信 `lja17613293519` 获取邀请码，添加时请备注「易搭试用」。
+
+## 项目拆解
+
+本版本的功能、数据流、模型调用、部署架构，以及 RAG / Agent 判定说明，见 [`docs/架构与RAG-Agent分析.md`](docs/架构与RAG-Agent分析.md)。
+
+当前代码结论：项目使用了视觉理解、图像生成和文本生成模型，但没有实现完整的 RAG，也没有实现具备自主规划和工具循环能力的 Agent。`ai_tasks` 是业务异步任务表，不等同于 AI Agent。
 
 ## 当前能力
 
@@ -274,3 +285,7 @@ SQLite 方案只适合早期单实例、低并发阶段。出现以下任一情�
 ## ComfyUI 衣物抠图
 
 项目支持把单件衣物抠图切换到 ComfyUI 官方 BiRefNet 工作流，并在服务不可用或蒙版质量不合格时回退云端。配置和工作流文件见 [`workflows/comfyui/README.md`](workflows/comfyui/README.md)。配置完成后仍从“我的衣柜”上传照片测试，衣物卡会显示实际抠图引擎。
+
+## 来源与授权说明
+
+本仓库基于团队最终版本 [`Zhouchengjian-user/YIDA`](https://github.com/Zhouchengjian-user/YIDA) 的 `main` 分支整理，首次同步基线为提交 `6df99eaf62cc5a67e0ca0428388a6218fd0b71e9`。当前仓库未附开源许可证；如需复制、修改或商用，请先联系项目团队确认授权范围。

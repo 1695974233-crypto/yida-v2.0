@@ -6,6 +6,7 @@ import { dbAll, dbFirst } from "../../../lib/db";
 import { storageGet, storagePut } from "../../../lib/storage";
 import { apiErrorResponse, logServerEvent } from "../../../lib/observability";
 import { withProtectedApiRequest } from "../../../lib/protected-route";
+import { buildTryOnPrompt } from "../../../lib/tryon-prompt";
 import {
   completeAiTask,
   ensureAiTaskSchema,
@@ -180,11 +181,6 @@ function semanticCacheHash(input: {
   return createHash("sha256").update(JSON.stringify({ version: SEMANTIC_CACHE_VERSION, promptVersion: PROMPT_VERSION, ...input })).digest("hex");
 }
 
-function buildTryOnPrompt(items: ImageRow[], scene: string, userPrompt: string) {
-  const references = items.map((item, index) => `图${index + 2}是${item.name}（${item.category}）`).join("；");
-  return `图1是用户全身照，${references}。请将图2至图${items.length + 1}的全部单品按真实类别穿戴到图1人物身上：不得遗漏、替换或新增单品，保留每件的主色、版型、长度、材质、纹理和图案。保持人物的脸、发型、肤色、身材比例和自然姿态，从头到脚完整入镜。场景：${scene}。补充要求：${userPrompt}。写实服装摄影，浅灰影棚，柔和自然光，无文字、水印、边框、多人或多余肢体。`;
-}
-
 function sharedSemanticGeneration(key: string, generate: () => Promise<CachedGeneration>) {
   const running = inFlightSemanticGenerations.get(key);
   if (running) return { promise: running, joined: true };
@@ -275,7 +271,7 @@ async function handlePOST(request: Request) {
     const itemIds = [...new Set((Array.isArray(submittedIds) ? submittedIds : []).map(String))].slice(0, 6);
     if (!itemIds.length) return ownerJson({ error: "请先选择一套搭配" }, owner, 400);
     const profile = await dbFirst<{ imageKey: string; contentType: string }>("SELECT image_key AS imageKey, content_type AS contentType FROM model_profiles WHERE owner_id = ?", [owner.id]);
-    if (!profile) return ownerJson({ error: "请先上传一张清晰的个人全身照" }, owner, 400);
+    const userProfile = await dbFirst<{ gender: string }>("SELECT gender FROM user_profiles WHERE owner_id = ?", [owner.id]);
     const placeholders = itemIds.map(() => "?").join(",");
     const rows = await dbAll<ImageRow>(`SELECT id, name, category, image_key AS imageKey FROM wardrobe_items
       WHERE owner_id = ? AND status = 'available' AND id IN (${placeholders})`, [owner.id, ...itemIds]);
@@ -295,7 +291,7 @@ async function handlePOST(request: Request) {
     const garmentImageVersions = ordered.map(item => item.imageKey);
     const semanticHash = semanticCacheHash({
       ownerId: owner.id,
-      profileImageVersion: profile.imageKey,
+      profileImageVersion: profile?.imageKey || `faceless-mannequin:${userProfile?.gender || "其他"}`,
       garmentImageVersions,
       scene,
       prompt: userPrompt,
@@ -308,7 +304,7 @@ async function handlePOST(request: Request) {
       title,
       scene,
       prompt: userPrompt,
-      profileImageVersion: profile.imageKey,
+      profileImageVersion: profile?.imageKey || `faceless-mannequin:${userProfile?.gender || "其他"}`,
       garmentImageVersions,
       model,
       size,
@@ -342,11 +338,11 @@ async function handlePOST(request: Request) {
       });
     }
 
-    const tryOnPrompt = buildTryOnPrompt(ordered, scene, userPrompt);
+    const tryOnPrompt = buildTryOnPrompt(ordered, scene, userPrompt, Boolean(profile), userProfile?.gender);
     const shared = sharedSemanticGeneration(resultKey, async () => {
       const preprocessStartedAt = performance.now();
       const optimizedImages = await Promise.all([
-        optimizedImageDataUrl(profile.imageKey, 1280, 86),
+        ...(profile ? [optimizedImageDataUrl(profile.imageKey, 1280, 86)] : []),
         ...ordered.map(item => optimizedImageDataUrl(item.imageKey, 640, 84)),
       ]);
       const preprocessMs = Math.round(performance.now() - preprocessStartedAt);

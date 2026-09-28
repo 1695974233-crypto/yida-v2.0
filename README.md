@@ -5,7 +5,7 @@
 ## 在线体验
 
 - 线上网站：[立即试用易搭](https://sidcq5h51g43rsuddsnda.apigateway-cn-beijing.volceapi.com/)
-- 当前线上采用邀请码登录。代码也支持配置 Supabase Auth 后使用邮箱账号；线上是否开放以部署配置为准。
+- 当前线上采用邀请码登录。代码已支持火山引擎 Agent Identity 账号登录；线上是否开放以部署配置为准。
 
 ## 项目拆解
 
@@ -21,7 +21,7 @@
 - AI 穿搭推荐、历史记录、收藏搭配和模特试穿；不上传本人照片也可生成不露脸假人效果图
 - 推荐卡片可直接标记“不适合我”“今天穿这套”或收藏；排除相同核心单品组合，换鞋或配饰不会算作新的一套
 - AI 识别后可改衣物材质、图案和适用场景；天气支持主动定位或搜索城市
-- 邀请码登录与可选的 Supabase 邮箱账号登录，服务端签名会话 Cookie，有效期 7 天
+- 邀请码登录与可选的火山引擎 Agent Identity 账号登录，服务端签名会话 Cookie，有效期 7 天
 - TOS 保存图片；轻量生产模式使用 SQLite + TOS 快照恢复
 
 ## 技术与运行方式
@@ -79,9 +79,11 @@ INVITE_CODES=<启用邀请码入口时配置，逗号分隔，每个至少 12 �
 SESSION_SECRET=<至少 32 个字符的随机密钥>
 OWNER_ID_SECRET=<另一份至少 32 个字符的随机密钥>
 
-# 可选：启用邮箱注册、登录、密码重置与 OAuth，需在镜像构建前配置
-NEXT_PUBLIC_SUPABASE_URL=<v1 Supabase 项目 URL>
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<该项目的 publishable key>
+# 可选：在 Agent Identity UserPool 创建 Web 客户端后配置；只在服务端运行时读取
+AGENT_IDENTITY_ISSUER=<用户池 OIDC issuer，精确复制运行时信息>
+AGENT_IDENTITY_CLIENT_ID=<Web 客户端 ID>
+AGENT_IDENTITY_CLIENT_SECRET=<Web 客户端 Secret>
+AGENT_IDENTITY_REDIRECT_URI=https://sidcq5h51g43rsuddsnda.apigateway-cn-beijing.volceapi.com/api/auth/agent/callback
 
 DASHSCOPE_API_KEY=<secret>
 DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
@@ -121,8 +123,9 @@ TOS_BUCKET=<bucket-name>
 - 邀请码会稳定映射为用户 ID，所有数据查询均按该 ID 隔离。
 - 轮换 `SESSION_SECRET` 会让全部用户退出登录。
 - 轮换 `OWNER_ID_SECRET` 或替换已使用的邀请码会改变用户 ID，使原衣柜看起来“消失”。上线后不要随意轮换；确需轮换时先做数据迁移。
-- Supabase 账号使用其用户 ID 派生独立衣柜 ID；它不会自动继承同一人的邀请码衣柜。需要合并旧数据时，应先确认账号归属并另做迁移。
-- Google/GitHub 登录和找回密码邮件需在 Supabase 控制台启用相应 Provider、邮件模板，并把本站地址加入 Auth Redirect URLs；未配置时保留邀请码入口。
+- Agent Identity 账号按 issuer 和用户 `sub` 派生独立衣柜 ID，不会自动继承邀请码衣柜或旧 Supabase 账号衣柜。需要合并旧数据时，先确认账号归属并单独迁移。更换用户池 issuer 或 `OWNER_ID_SECRET` 也会改变映射，必须先规划迁移。
+- 在 Agent Identity UserPool 中启用需要的注册、登录、找回密码和外部身份提供商，并创建 Web 客户端。将 `AGENT_IDENTITY_REDIRECT_URI` 的完整地址加入允许的回调 URL。应用从 issuer 的 discovery 文档读取授权、令牌和公钥端点，并使用 Authorization Code + PKCE 验证 ID Token。未配置时保留邀请码入口。
+- 应用退出会清除本站会话；若用户池托管登录页仍有单点登录会话，下次点击账号登录可能自动识别同一账号。公用设备应同时退出身份服务或使用无痕窗口。
 - 生产缺少或误配 `SESSION_SECRET`、`OWNER_ID_SECRET` 时，账号和邀请码会话接口会拒绝服务，不能降级成匿名访问；未配置 `INVITE_CODES` 时邀请码入口不可用。
 
 ## 既有本地数据迁移
